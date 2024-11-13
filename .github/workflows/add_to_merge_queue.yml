@@ -1,0 +1,56 @@
+name: Add to Merge Queue
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Runs every 15 minutes
+  workflow_dispatch:        # Allows manual triggering of the workflow
+
+jobs:
+  add_to_merge_queue:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
+          sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
+          sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "${GITHUB_TOKEN}" | gh auth login --with-token
+
+      - name: Fetch open PRs and add to merge queue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get list of open PRs with their merge statuses
+          json_output=$(gh pr list --json number,mergeStateStatus)
+
+          # Parse JSON output and iterate over each PR
+          echo "${json_output}" | jq -c '.[]' | while read -r pr; do
+            pr_number=$(echo "${pr}" | jq -r '.number')
+            merge_state_status=$(echo "${pr}" | jq -r '.mergeStateStatus')
+
+            # Check if the PR is ready for merging
+            if [[ "${merge_state_status}" == "CLEAN" ]]; then
+              echo "PR #${pr_number} is ready for merging. Adding to merge queue."
+
+              # Add PR to merge queue
+              gh pr merge --auto "${pr_number}"
+
+              # Wait for 3 minutes before processing the next PR
+              echo "Waiting for 3 minutes before processing the next PR."
+              sleep 180
+            else
+              echo "PR #${pr_number} is not ready for merging. Status: ${merge_state_status}"
+            fi
+          done

@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install GitHub CLI
         run: |
@@ -24,13 +24,10 @@ jobs:
           sudo apt install gh -y
 
       - name: Authenticate GitHub CLI
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "${GITHUB_TOKEN}" | gh auth login --with-token
+        run: |
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Fetch open PRs and add to merge queue
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get list of open PRs with their merge statuses
           json_output=$(gh pr list --json number,mergeStateStatus)
